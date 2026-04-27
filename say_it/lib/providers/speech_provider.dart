@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:permission_handler/permission_handler.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:flutter_tts/flutter_tts.dart';
 
@@ -33,11 +32,13 @@ class SpeechProvider with ChangeNotifier {
   }
 
   void _initializeTts() async {
-    await _flutterTts.setLanguage('en_US');
+    await _flutterTts.setLanguage('en-US');
     await _flutterTts.setPitch(1.0);
     await _flutterTts.setSpeechRate(0.5);
   }
 
+  /// Initializes speech recognition. The speech_to_text package
+  /// handles microphone permission requests internally during initialize().
   Future<void> initializeSpeech() async {
     if (_isInitialized) return;
 
@@ -56,7 +57,7 @@ class SpeechProvider with ChangeNotifier {
         _isInitialized = true;
         _lastError = null;
       } else {
-        _lastError = 'Speech recognition not available';
+        _lastError = 'Speech recognition not available. Please grant microphone permission in Settings.';
       }
     } catch (e) {
       _lastError = e.toString();
@@ -64,9 +65,14 @@ class SpeechProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Checks if microphone permission is available by attempting to initialize.
   Future<bool> requestMicrophonePermission() async {
-    final status = await Permission.microphone.request();
-    return status.isGranted;
+    try {
+      bool available = await _speechToText.initialize();
+      return available;
+    } catch (e) {
+      return false;
+    }
   }
 
   Future<void> startListening(String languageCode) async {
@@ -74,35 +80,27 @@ class SpeechProvider with ChangeNotifier {
       await initializeSpeech();
     }
 
-    final permissionStatus = await Permission.microphone.status;
-    if (!permissionStatus.isGranted) {
-      final granted = await requestMicrophonePermission();
-      if (!granted) {
-        _lastError = 'Microphone permission denied';
-        notifyListeners();
-        return;
-      }
+    // If still not initialized after attempting (permission denied, etc.)
+    if (!_isInitialized) {
+      _lastError = 'Microphone permission denied. Please grant permission in Settings.';
+      notifyListeners();
+      return;
     }
 
     if (!_isListening) {
-      bool available = await _speechToText.initialize();
-      if (available) {
-        _isListening = true;
-        _recognizedText = '';
-        _lastError = null;
-        _currentLanguage = languageCode;
+      _isListening = true;
+      _recognizedText = '';
+      _lastError = null;
+      _currentLanguage = languageCode;
 
-        _speechToText.listen(
-          onResult: (result) {
-            _recognizedText = result.recognizedWords;
-            _soundLevel = result.confidence;
-            notifyListeners();
-          },
-          localeId: _languageMap[languageCode] ?? 'en_US',
-        );
-      } else {
-        _lastError = 'Could not initialize speech recognition';
-      }
+      _speechToText.listen(
+        onResult: (result) {
+          _recognizedText = result.recognizedWords;
+          _soundLevel = result.confidence;
+          notifyListeners();
+        },
+        localeId: _languageMap[languageCode] ?? 'en_US',
+      );
     }
     notifyListeners();
   }
@@ -129,11 +127,11 @@ class SpeechProvider with ChangeNotifier {
   String _getLocaleForLanguage(String languageCode) {
     switch (languageCode) {
       case 'hi':
-        return 'hi_IN';
+        return 'hi-IN';
       case 'te':
-        return 'te_IN';
+        return 'te-IN';
       default:
-        return 'en_US';
+        return 'en-US';
     }
   }
 
